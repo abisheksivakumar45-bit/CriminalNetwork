@@ -12,6 +12,7 @@ export default function Register() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState('analyst');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -21,7 +22,7 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // Separate validation for each field — only submit when all three are valid.
+    // Separate validation for each field — only submit when all fields are valid.
     if (!username.trim()) {
       setError('Please enter a username.');
       return;
@@ -41,7 +42,7 @@ export default function Register() {
     setSubmitting(true);
     setError('');
     try {
-      await apiRegister(username.trim(), password);
+      await apiRegister(username.trim(), password, role);
       // Registration does not create a session — send the user to Login.
       navigate('/login', { replace: true });
     } catch (err) {
@@ -51,6 +52,8 @@ export default function Register() {
         setError('Username already exists. Please choose another.');
       } else if (status === 422) {
         setError(typeof detail === 'string' ? detail : 'Validation error: password must be at least 8 characters.');
+      } else if (status === 403) {
+        setError(typeof detail === 'string' ? detail : 'This account type is not available for self-registration.');
       } else {
         setError('Registration failed. Please try again.');
       }
@@ -124,6 +127,24 @@ export default function Register() {
                 className="w-full px-4 py-3 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 style={{ background: '#111827', border: '1px solid #1e3a5f' }}
               />
+            </div>
+
+            <div>
+              <label className="text-xs font-medium text-gray-400 block mb-1.5">Account Type</label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{ background: '#111827', border: '1px solid #1e3a5f' }}
+              >
+                <option value="analyst">Analyst</option>
+                <option value="investigator">Investigator</option>
+              </select>
+              <p className="text-xs mt-1.5 leading-relaxed" style={{ color: '#64748b' }}>
+                {role === 'investigator'
+                  ? 'Investigator — Investigate cases and add case information.'
+                  : 'Analyst — View and analyze case information.'}
+              </p>
             </div>
 
             {error && (

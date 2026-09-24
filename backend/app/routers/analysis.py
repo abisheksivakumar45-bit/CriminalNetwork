@@ -8,12 +8,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 from app.services.database import db_service
 from app.services.network_analysis import network_service
 from app.models.schemas import DashboardStats, EntityResponse, NetworkAnalysis
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, require_roles, ANY_AUTH_ROLE
 
 router = APIRouter(
     prefix="/api",
     tags=["analysis"],
-    dependencies=[Depends(get_current_user)],
+    dependencies=[Depends(get_current_user), Depends(require_roles(*ANY_AUTH_ROLE))],
 )
 
 

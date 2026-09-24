@@ -20,6 +20,7 @@ ROLE_ANALYST = "analyst"
 
 WRITE_ROLES = (ROLE_ADMIN, ROLE_INVESTIGATOR)   # can create cases, entities, relationships
 ADMIN_ONLY = (ROLE_ADMIN,)
+ANY_AUTH_ROLE = (ROLE_ADMIN, ROLE_INVESTIGATOR, ROLE_ANALYST)  # every authenticated role may read
 
 
 def _unauthorized() -> HTTPException:

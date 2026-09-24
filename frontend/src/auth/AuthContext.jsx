@@ -62,9 +62,11 @@ export function AuthProvider({ children }) {
     return (ROLE_PERMISSIONS[user.role] || []).includes(permission);
   }, [user]);
 
+  const permissions = user ? (ROLE_PERMISSIONS[user.role] || []) : [];
+
   const value = useMemo(
-    () => ({ user, role: user?.role || null, loading, login, logout, can }),
-    [user, loading, login, logout, can]
+    () => ({ user, role: user?.role || null, permissions, loading, login, logout, can }),
+    [user, permissions, loading, login, logout, can]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

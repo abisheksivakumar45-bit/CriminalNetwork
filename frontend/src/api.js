@@ -10,11 +10,12 @@ const api = axios.create({
 
 // ─── Authentication helpers ───
 export const login = (username, password) => api.post('/auth/login', { username, password });
-export const register = (username, password) => api.post('/auth/register', { username, password });
+export const register = (username, password, role) => api.post('/auth/register', { username, password, role });
 export const logout = () => api.post('/auth/logout');
 export const getCurrentUser = () => api.get('/auth/me');
 export const getAuthUsers = () => api.get('/auth/users');
 export const createAuthUser = (data) => api.post('/auth/users', data);
+export const changeUserRole = (username, role) => api.patch('/auth/users/role', { username, role });
 
 // ─── Existing data endpoints ───
 export const getDashboard = () => api.get('/dashboard');

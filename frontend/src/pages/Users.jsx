@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { getAuthUsers, createAuthUser } from '../api';
+import { getAuthUsers, createAuthUser, changeUserRole } from '../api';
+import { useAuth } from '../auth/AuthContext';
 
 const ROLE_COLORS = { admin: '#8b5cf6', investigator: '#3b82f6', analyst: '#06b6d4' };
 
 export default function Users() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -19,6 +21,10 @@ export default function Users() {
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const [roleDrafts, setRoleDrafts] = useState({});
+  const [roleUpdating, setRoleUpdating] = useState(false);
+  const [roleError, setRoleError] = useState('');
+
   const loadUsers = () => {
     setLoading(true);
     setError('');
@@ -29,6 +35,26 @@ export default function Users() {
   };
 
   useEffect(loadUsers, []);
+
+  const handleRoleChange = async (username) => {
+    const newRole = roleDrafts[username];
+    if (!newRole) return;
+    setRoleUpdating(true);
+    setRoleError('');
+    try {
+      await changeUserRole(username, newRole);
+      setRoleDrafts((d) => {
+        const next = { ...d };
+        delete next[username];
+        return next;
+      });
+      loadUsers();
+    } catch (err) {
+      setRoleError(err.response?.data?.detail || `Could not change role for ${username}.`);
+    } finally {
+      setRoleUpdating(false);
+    }
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -135,6 +161,11 @@ export default function Users() {
       )}
 
       <div className="glass-card p-6 rounded-xl">
+        {roleError && (
+          <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#ef444420', color: '#ef4444', border: '1px solid #ef444440' }}>
+            {roleError}
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-10 gap-2">
             <div className="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
@@ -163,9 +194,34 @@ export default function Users() {
                     <td className="py-3 px-3" style={{ color: '#cbd5e1' }}>{u.display_name}</td>
                     <td className="py-3 px-3" style={{ color: '#94a3b8' }}>{u.email}</td>
                     <td className="py-3 px-3">
-                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${ROLE_COLORS[u.role]}20`, color: ROLE_COLORS[u.role] || '#94a3b8' }}>
-                        {(u.role || '').toUpperCase()}
-                      </span>
+                      {u.username === currentUser?.username ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: `${ROLE_COLORS[u.role]}20`, color: ROLE_COLORS[u.role] || '#94a3b8' }}>
+                          {(u.role || '').toUpperCase()}
+                        </span>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <select
+                            value={roleDrafts[u.username] ?? u.role}
+                            onChange={(e) => setRoleDrafts((d) => ({ ...d, [u.username]: e.target.value }))}
+                            className="px-2 py-1.5 rounded-lg text-xs text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            style={{ background: '#111827', border: '1px solid #1e3a5f' }}
+                          >
+                            <option value="analyst">Analyst</option>
+                            <option value="investigator">Investigator</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                          {roleDrafts[u.username] != null && (
+                            <button
+                              onClick={() => handleRoleChange(u.username)}
+                              disabled={roleUpdating}
+                              className="px-2 py-1 rounded text-xs text-white disabled:opacity-60"
+                              style={{ background: '#3b82f6' }}
+                            >
+                              Update
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3">
                       <span className="text-xs flex items-center gap-1.5" style={{ color: u.active ? '#10b981' : '#ef4444' }}>

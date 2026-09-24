@@ -30,6 +30,13 @@ AUTH_COOKIE_SECURE = os.getenv("AUTH_COOKIE_SECURE", "false").lower() in ("1", "
 AUTH_LOGIN_MAX_ATTEMPTS = int(os.getenv("AUTH_LOGIN_MAX_ATTEMPTS", "5"))
 AUTH_LOGIN_LOCKOUT_SECONDS = int(os.getenv("AUTH_LOGIN_LOCKOUT_SECONDS", "300"))
 
+# Registration policy.
+# Analyst self-registration is always allowed. Investigator self-registration
+# is only allowed when explicitly enabled (demo/development). Admin can never
+# be self-registered — admin accounts exist only through the seeded demo
+# accounts or an existing admin creating them.
+ALLOW_SELF_REGISTER_INVESTIGATOR = os.getenv("ALLOW_SELF_REGISTER_INVESTIGATOR", "false").lower() in ("1", "true", "yes")
+
 # Demo accounts (clearly DEMO-only, never production credentials).
 # Accounts are seeded into the separate AuthUser store at startup when
 # AUTH_DEMO_ENABLED is true. Passwords are read from the environment only;

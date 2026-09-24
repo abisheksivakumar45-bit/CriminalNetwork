@@ -54,6 +54,7 @@ services:
       - AUTH_DEMO_ANALYST_EMAIL=${AUTH_DEMO_ANALYST_EMAIL:-analyst@crimenet.demo}
       - AUTH_LOGIN_MAX_ATTEMPTS=${AUTH_LOGIN_MAX_ATTEMPTS:-5}
       - AUTH_LOGIN_LOCKOUT_SECONDS=${AUTH_LOGIN_LOCKOUT_SECONDS:-300}
+      - ALLOW_SELF_REGISTER_INVESTIGATOR=${ALLOW_SELF_REGISTER_INVESTIGATOR:-false}
     depends_on:
       neo4j:
         condition: service_healthy

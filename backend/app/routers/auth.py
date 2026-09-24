@@ -1,4 +1,5 @@
 """Authentication endpoints: login, refresh, logout, session, user admin."""
+import re
 import threading
 import time
 from typing import Dict, List
@@ -19,12 +20,35 @@ from app.dependencies import (
     get_current_user,
     require_roles,
     ROLE_ADMIN,
+    ROLE_INVESTIGATOR,
+    ROLE_ANALYST,
 )
 from app.models.schemas import UserCreate, UserResponse, AuthSuccessResponse
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 GENERIC_LOGIN_ERROR = "Invalid username or password."
+
+VALID_ROLES = (ROLE_ADMIN, ROLE_INVESTIGATOR, ROLE_ANALYST)
+PUBLIC_REGISTERABLE_ROLES = (ROLE_INVESTIGATOR, ROLE_ANALYST)
+USERNAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$")
+
+
+def validate_username(raw: str) -> str:
+    """Normalize + validate a username. Raise 422 with a clear message when invalid."""
+    username = (raw or "").strip()
+    if not username:
+        raise HTTPException(status_code=422, detail="Username is required.")
+    if len(username) > 64:
+        raise HTTPException(status_code=422, detail="Username must be at most 64 characters.")
+    if len(username) < 3:
+        raise HTTPException(status_code=422, detail="Username must be at least 3 characters.")
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise HTTPException(
+            status_code=422,
+            detail="Username may only contain letters, numbers, dots, underscores and hyphens (and must start with a letter or number).",
+        )
+    return username
 
 
 class LoginRequest(BaseModel):
@@ -141,25 +165,42 @@ def login(data: LoginRequest, request: Request, response: Response):
 
 # ─────────────────────────── Registration ──────────────────────────────
 class RegisterRequest(BaseModel):
-    username: str = Field(..., min_length=1, max_length=128)
+    username: str = Field(..., min_length=1, max_length=64)
     password: str = Field(..., min_length=8, max_length=256)
+    role: str = Field("analyst", description="analyst (default) or investigator. Admin is never assignable.")
 
 
 @router.post("/register", response_model=UserResponse)
 def register(data: RegisterRequest):
-    """Self‑registration: new users default to the 'investigator' role (can add cases)."""
-    if auth_service.get_user(data.username.strip()):
+    """Self‑registration with server‑side role validation.
+
+    The requested role is never trusted from the client. Only analyst and
+    investigator are assignable; admin can never be self-registered.
+    Investigator requires ALLOW_SELF_REGISTER_INVESTIGATOR=true.
+    """
+    username = validate_username(data.username)
+    role = (data.role or "").strip().lower()
+    if role not in PUBLIC_REGISTERABLE_ROLES:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid role for self-registration. Choose 'analyst' or 'investigator'.",
+        )
+    if role == ROLE_INVESTIGATOR and not config.ALLOW_SELF_REGISTER_INVESTIGATOR:
+        raise HTTPException(
+            status_code=403,
+            detail="Investigator self-registration is currently disabled. Register as an analyst.",
+        )
+    if auth_service.get_user(username):
         raise HTTPException(status_code=409, detail="Username already exists.")
-    role = "investigator"
     auth_service.upsert_user(
-        username=data.username.strip(),
+        username=username,
         role=role,
-        display_name=data.username,
+        display_name=username,
         email="",
         password_hash=auth_service.hash_password(data.password),
         active=True,
     )
-    user = auth_service.get_user(data.username.strip())
+    user = auth_service.get_user(username)
     return UserResponse(
         username=user["username"],
         display_name=user.get("display_name", ""),
@@ -233,23 +274,62 @@ def list_users(_: dict = Depends(require_roles(ROLE_ADMIN))):
 @router.post("/users", response_model=UserResponse)
 def create_user(data: UserCreate, _: dict = Depends(require_roles(ROLE_ADMIN))):
     role = data.role.strip().lower()
-    if role not in (ROLE_ADMIN, "investigator", "analyst"):
+    if role not in VALID_ROLES:
         raise HTTPException(status_code=422, detail="Invalid role. Use admin, investigator or analyst.")
-    if auth_service.get_user(data.username.strip()):
+    username = validate_username(data.username)
+    if auth_service.get_user(username):
         raise HTTPException(status_code=409, detail="Username already exists.")
     auth_service.upsert_user(
-        username=data.username.strip(),
+        username=username,
         role=role,
         display_name=data.display_name,
         email=data.email,
         password_hash=auth_service.hash_password(data.password),
         active=True,
     )
-    user = auth_service.get_user(data.username.strip())
+    user = auth_service.get_user(username)
     return UserResponse(
         username=user["username"],
         display_name=user.get("display_name", ""),
         email=user.get("email", ""),
         role=user.get("role", ""),
         active=user.get("active", True),
+    )
+
+
+class RoleChangeRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+    role: str = Field(..., min_length=1, max_length=32)
+
+
+@router.patch("/users/role", response_model=UserResponse)
+def change_user_role(data: RoleChangeRequest, current_user: dict = Depends(require_roles(ROLE_ADMIN))):
+    """Admin-only role change. Admin can never change their own role (blocks
+    Analyst→Admin, Investigator→Admin and self-assignment of admin through
+    normal requests). All other role transitions between the three roles are
+    permitted for an authenticated admin; ``active`` is preserved."""
+    target_username = validate_username(data.username)
+    if target_username == current_user["username"]:
+        raise HTTPException(status_code=403, detail="You cannot change your own role.")
+    user = auth_service.get_user(target_username)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    new_role = data.role.strip().lower()
+    if new_role not in VALID_ROLES:
+        raise HTTPException(status_code=422, detail="Invalid role. Use admin, investigator or analyst.")
+    auth_service.upsert_user(
+        username=user["username"],
+        role=new_role,
+        display_name=user.get("display_name", ""),
+        email=user.get("email", ""),
+        password_hash="",  # never touch/overwrite the stored password hash
+        active=user.get("active", True),
+    )
+    updated = auth_service.get_user(target_username)
+    return UserResponse(
+        username=updated["username"],
+        display_name=updated.get("display_name", ""),
+        email=updated.get("email", ""),
+        role=updated.get("role", ""),
+        active=bool(updated.get("active", True)),
     )
