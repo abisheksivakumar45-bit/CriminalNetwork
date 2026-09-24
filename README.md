@@ -141,6 +141,32 @@ CriminalNetwork/
 | POST | `/api/init/load-sample-data` | Load demo data |
 | POST | `/api/init/clear` | Clear database |
 
+## Authentication & Role-Based Access Control
+
+All API routes now require authentication except `/api/auth/login`, `/api/auth/refresh`,
+`/api/auth/logout`, `/health`, and the OpenAPI docs. The SPA redirects unauthenticated
+users to a dedicated login page.
+
+### Demo accounts (DEMO ONLY — not production credentials)
+
+| Username | Password | Role capabilities |
+|----------|----------|-------------------|
+| `admin` | `ChangeThisDemoPassword` | Full access + user management |
+| `investigator` | `ChangeThisDemoPassword` | Investigation + add cases |
+| `analyst` | `ChangeThisDemoPassword` | Read-only investigation (no Add Case) |
+
+The demo password is configured through environment variables
+(`AUTH_DEMO_*_PASSWORD` in `.env`). Change it there — never past it into code.
+
+### How it works
+- Passwords are hashed with **scrypt** (memory-hard; no plaintext/hash exposure).
+- Sessions use short-lived **HS256 JWTs** (15 min) stored in **httpOnly, SameSite=Lax**
+  cookies scoped to `/api`, refreshed with a rotating refresh cookie (7 days).
+- Roles are validated **server-side** on every request from the Neo4j `AuthUser` store
+  (never trusted from the client): 401 = unauthenticated, 403 = insufficient permission.
+- Basic brute-force protection: after 5 failed logins per account, login is blocked for
+  5 minutes (configured via `AUTH_LOGIN_MAX_ATTEMPTS` / `AUTH_LOGIN_LOCKOUT_SECONDS`).
+
 ## Configuration
 
 Environment variables are configured in the `.env` file:
@@ -152,7 +178,22 @@ NEO4J_PASSWORD=password123
 
 # CORS Origins (comma-separated)
 CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+
+# Auth / RBAC (see .env.example for the full list)
+AUTH_SECRET_KEY=your-long-random-secret
+AUTH_ACCESS_TOKEN_EXPIRE_MINUTES=15
+AUTH_REFRESH_TOKEN_EXPIRE_DAYS=7
+AUTH_DEMO_ADMIN_USERNAME=admin
+AUTH_DEMO_ADMIN_PASSWORD=ChangeThisDemoPassword
+AUTH_DEMO_INVESTIGATOR_USERNAME=investigator
+AUTH_DEMO_INVESTIGATOR_PASSWORD=ChangeThisDemoPassword
+AUTH_DEMO_ANALYST_USERNAME=analyst
+AUTH_DEMO_ANALYST_PASSWORD=ChangeThisDemoPassword
 ```
+
+> `.env` is git-ignored. Copy `.env.example` and fill in real values. Never commit secrets.
+> This is a prototype: switch to a hardened identity provider (Keycloak/Auth0/OIDC),
+> Argon2/bcrypt, HTTPS, a server-side session store, and stronger rate limiting for production.
 
 ## Troubleshooting
 

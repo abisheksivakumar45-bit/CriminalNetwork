@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List
 import sys
 import os
@@ -9,8 +9,13 @@ from app.services.database import db_service
 from app.services.nlp_service import nlp_service
 from app.services.network_analysis import network_service
 from app.models.schemas import CrimeRecord, CrimeRecordResponse
+from app.dependencies import get_current_user, require_roles, WRITE_ROLES
 
-router = APIRouter(prefix="/api/crimes", tags=["crimes"])
+router = APIRouter(
+    prefix="/api/crimes",
+    tags=["crimes"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 def _compute_entity_scores():
@@ -72,7 +77,7 @@ def get_crime(crime_id: str):
     }
 
 
-@router.post("/", response_model=CrimeRecordResponse)
+@router.post("/", response_model=CrimeRecordResponse, dependencies=[Depends(require_roles(*WRITE_ROLES))])
 def create_crime(data: CrimeRecord):
     record = db_service.create_crime_record(data.dict(exclude={"extracted_entities"}))
 

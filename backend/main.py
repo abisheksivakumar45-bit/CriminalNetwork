@@ -6,8 +6,8 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import CORS_ORIGINS
-from app.routers import entities, relationships, crimes, analysis, init_data
+from config import CORS_ORIGINS, AUTH_DEMO_ENABLED, AUTH_SECRET_KEY
+from app.routers import auth, entities, relationships, crimes, analysis, init_data
 
 app = FastAPI(
     title="Criminal Network Analysis System",
@@ -28,13 +28,27 @@ app.include_router(relationships.router)
 app.include_router(crimes.router)
 app.include_router(analysis.router)
 app.include_router(init_data.router)
+app.include_router(auth.router)
+
+
+def _warn_about_ephemeral_secret():
+    import os
+    if not (os.getenv("AUTH_SECRET_KEY") or "").strip():
+        print(
+            "WARNING: AUTH_SECRET_KEY is not set. JWT signing uses a random "
+            "ephemeral secret — sessions will be invalidated on restart. "
+            "Set AUTH_SECRET_KEY in .env for persistent signing."
+        )
 
 
 @app.on_event("startup")
 def startup_event():
-    """Auto-load sample data on first startup if database is empty."""
+    """Auto-load sample data on first startup if database is empty, then seed demo auth users."""
     from app.services.database import db_service
     from app.services.sample_data import load_sample_data
+    from app.services import auth_service
+
+    _warn_about_ephemeral_secret()
 
     print("Startup: Waiting for Neo4j to be ready...")
     max_retries = 30
@@ -50,6 +64,8 @@ def startup_event():
                 print("Startup: Sample data loaded successfully.")
             else:
                 print(f"Startup: Database has {entity_count} entities. Skipping sample data load.")
+
+            auth_service.seed_demo_users()
             return
         except Exception as e:
             print(f"Startup: Attempt {attempt + 1}/{max_retries} - Neo4j not ready: {e}")
@@ -63,6 +79,12 @@ def root():
     return {
         "message": "Criminal Network Analysis System API",
         "version": "1.0.0",
+        "auth": {
+            "login": "POST /api/auth/login",
+            "refresh": "POST /api/auth/refresh",
+            "logout": "POST /api/auth/logout",
+            "me": "GET /api/auth/me",
+        },
         "endpoints": {
             "docs": "/docs",
             "dashboard": "/api/dashboard",

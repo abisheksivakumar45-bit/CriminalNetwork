@@ -116,3 +116,23 @@ class DashboardStats(BaseModel):
 class PathResult(BaseModel):
     path: List[dict] = []
     length: int = 0
+
+
+class UserCreate(BaseModel):
+    username: str = Field(..., min_length=1, max_length=128)
+    password: str = Field(..., min_length=8, max_length=256)
+    role: str = Field("analyst", description="admin, investigator or analyst")
+    display_name: str = ""
+    email: str = ""
+
+
+class UserResponse(BaseModel):
+    username: str
+    display_name: str = ""
+    email: str = ""
+    role: str
+    active: bool = True
+
+
+class AuthSuccessResponse(BaseModel):
+    user: UserResponse

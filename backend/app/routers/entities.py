@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
 from datetime import datetime
 import sys
@@ -8,8 +8,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.services.database import db_service
 from app.models.schemas import EntityCreate, EntityResponse
+from app.dependencies import get_current_user, require_roles, WRITE_ROLES, ADMIN_ONLY
 
-router = APIRouter(prefix="/api/entities", tags=["entities"])
+router = APIRouter(
+    prefix="/api/entities",
+    tags=["entities"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 REL_LABELS = {
@@ -189,13 +194,13 @@ def get_entity(entity_id: str):
     return entity_to_response(entity)
 
 
-@router.post("/", response_model=EntityResponse)
+@router.post("/", response_model=EntityResponse, dependencies=[Depends(require_roles(*WRITE_ROLES))])
 def create_entity(data: EntityCreate):
     entity = db_service.create_entity(data.entity_type.value, data.name, data.properties)
     return entity_to_response(entity)
 
 
-@router.delete("/{entity_id}")
+@router.delete("/{entity_id}", dependencies=[Depends(require_roles(*ADMIN_ONLY))])
 def delete_entity(entity_id: str):
     db_service.delete_entity(entity_id)
     return {"message": "Entity deleted"}

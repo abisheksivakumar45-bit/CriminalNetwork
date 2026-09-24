@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Optional
 import sys
 import os
@@ -7,8 +7,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from app.services.database import db_service
 from app.models.schemas import RelationshipCreate
+from app.dependencies import get_current_user, require_roles, WRITE_ROLES
 
-router = APIRouter(prefix="/api/relationships", tags=["relationships"])
+router = APIRouter(
+    prefix="/api/relationships",
+    tags=["relationships"],
+    dependencies=[Depends(get_current_user)],
+)
 
 
 @router.get("/")
@@ -20,7 +25,7 @@ def get_relationships(entity_id: Optional[str] = None):
     return rels
 
 
-@router.post("/")
+@router.post("/", dependencies=[Depends(require_roles(*WRITE_ROLES))])
 def create_relationship(data: RelationshipCreate):
     rel = db_service.create_relationship(
         data.source_id, data.target_id,
