@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Path
 from typing import List
 import sys
 import os
@@ -66,7 +66,7 @@ def get_crimes():
 
 
 @router.get("/{crime_id}")
-def get_crime(crime_id: str):
+def get_crime(crime_id: str = Path(..., min_length=1, max_length=64)):
     record = db_service.get_crime_record(crime_id)
     if not record:
         raise HTTPException(status_code=404, detail="Crime record not found")
@@ -79,7 +79,16 @@ def get_crime(crime_id: str):
 
 @router.post("/", response_model=CrimeRecordResponse, dependencies=[Depends(require_roles(*WRITE_ROLES))])
 def create_crime(data: CrimeRecord):
-    record = db_service.create_crime_record(data.dict(exclude={"extracted_entities"}))
+    payload = {
+        "fir_number": data.fir_number,
+        "title": data.title,
+        "description": data.description,
+        "date": data.date,
+        "location": data.location,
+        "ipc_sections": data.ipc_sections,
+        "status": data.status.value,
+    }
+    record = db_service.create_crime_record(payload)
 
     # Extract entities using NLP
     text = f"{data.title}. {data.description}"

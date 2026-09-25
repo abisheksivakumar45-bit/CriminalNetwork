@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Path, Query
 from typing import List, Optional
 import sys
 import os
@@ -206,7 +206,7 @@ def get_network():
 
 
 @router.get("/search")
-def search_entities(q: str = Query(..., min_length=1)):
+def search_entities(q: str = Query(..., min_length=1, max_length=200)):
     entities = db_service.search_entities(q)
     rels = []
     for e in entities:
@@ -237,7 +237,7 @@ def search_entities(q: str = Query(..., min_length=1)):
 
 
 @router.get("/investigation/{entity_id}")
-def get_investigation(entity_id: str):
+def get_investigation(entity_id: str = Path(..., min_length=1, max_length=64)):
     entity = db_service.get_entity(entity_id)
     if not entity:
         return {"error": "Entity not found"}
@@ -313,8 +313,12 @@ def get_investigation(entity_id: str):
 
 
 @router.get("/path")
-def find_path_between(source_id: str = Query(...), target_id: str = Query(...)):
-    paths = db_service.find_path(source_id, target_id)
+def find_path_between(
+    source_id: str = Query(..., min_length=1, max_length=64),
+    target_id: str = Query(..., min_length=1, max_length=64),
+    max_depth: int = Query(6, ge=1, le=10),
+):
+    paths = db_service.find_path(source_id, target_id, max_depth)
     if not paths:
         return {"paths": [], "message": "No path found between entities"}
 

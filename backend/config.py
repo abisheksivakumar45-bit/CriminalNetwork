@@ -10,7 +10,13 @@ NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "password123")
 NEO4J_DATABASE = os.getenv("NEO4J_DATABASE", "neo4j")
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = int(os.getenv("APP_PORT", "8000"))
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",")
+# CORS: only explicit, trusted origins are allowed (credentialed requests).
+# A wildcard "*" is never accepted — it is stripped with a warning so the
+# default dev origins keep working safely.
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000").split(",") if o.strip()]
+if "*" in CORS_ORIGINS:
+    print("WARNING: '*' in CORS_ORIGINS is not allowed; removed. Use explicit origins instead.")
+    CORS_ORIGINS.remove("*")
 SPACY_MODEL = os.getenv("SPACY_MODEL", "en_core_web_sm")
 
 # ─── Authentication / RBAC ───

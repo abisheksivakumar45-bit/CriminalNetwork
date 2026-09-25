@@ -35,6 +35,9 @@ def get_current_user(request: Request) -> dict:
     claims = auth_service.decode_jwt(token, config.AUTH_SECRET_KEY)
     if not claims or claims.get("type") != "access":
         raise _unauthorized()
+    # Reject access tokens that were explicitly revoked at logout.
+    if auth_service.is_access_token_revoked(claims.get("jti")):
+        raise _unauthorized()
     username = claims.get("sub") or ""
     user = auth_service.get_user(username)
     if not user or not user.get("active"):

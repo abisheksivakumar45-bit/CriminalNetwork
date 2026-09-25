@@ -1,13 +1,20 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+import logging
 import sys
 import os
 import time
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from config import CORS_ORIGINS, AUTH_DEMO_ENABLED, AUTH_SECRET_KEY
+from config import CORS_ORIGINS
 from app.routers import auth, entities, relationships, crimes, analysis, init_data
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("crimenet")
 
 app = FastAPI(
     title="Criminal Network Analysis System",
@@ -23,12 +30,61 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Security middleware ───
+# Request-size protection: reject oversized request bodies before they are read.
+MAX_REQUEST_BODY_BYTES = 256 * 1024  # 256 KB
+
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > MAX_REQUEST_BODY_BYTES:
+                    return JSONResponse(status_code=413, content={"detail": "Request body too large."})
+            except ValueError:
+                pass
+        return await call_next(request)
+
+
+# Basic security headers on every API response.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        for header, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
+        return response
+
+
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestSizeLimitMiddleware)
+
 app.include_router(entities.router)
 app.include_router(relationships.router)
 app.include_router(crimes.router)
 app.include_router(analysis.router)
 app.include_router(init_data.router)
 app.include_router(auth.router)
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    """Catch-all: log full details server-side, return a safe generic response."""
+    logger.error(
+        "Unhandled exception on %s %s: %s",
+        request.method,
+        request.url.path,
+        exc,
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error."})
 
 
 def _warn_about_ephemeral_secret():
@@ -106,4 +162,6 @@ def health():
         db_service._run_query("RETURN 1")
         return {"status": "healthy", "neo4j": "connected"}
     except Exception as e:
-        return {"status": "unhealthy", "neo4j": str(e)}
+        # Never leak DB details to clients; log them server-side only.
+        logger.error("Health check failed: %s", e, exc_info=True)
+        return {"status": "unhealthy", "neo4j": "connection unavailable"}

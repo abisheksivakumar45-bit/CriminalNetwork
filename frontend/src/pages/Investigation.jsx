@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import * as d3 from 'd3';
 import { getEntities, getInvestigation, searchEntities, getEntityTimeline } from '../api';
+import { resolveApiError } from '../utils/errors';
 
 const ENTITY_COLORS = {
   Person: '#3b82f6', Phone: '#ec4899', Vehicle: '#f59e0b',
@@ -46,6 +47,7 @@ export default function Investigation() {
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState('');
   const [timelineFilter, setTimelineFilter] = useState('all');
+  const [investigationError, setInvestigationError] = useState('');
 
   useEffect(() => { loadAllEntities(); }, []);
 
@@ -91,10 +93,15 @@ export default function Investigation() {
 
   const loadInvestigation = async (id) => {
     setLoading(true);
+    setInvestigationError('');
     try {
       const res = await getInvestigation(id);
-      setInvestigation(res.data);
-    } catch (err) { console.error(err); }
+      if (res.data?.error) {
+        setInvestigationError('Entity not found.');
+      } else {
+        setInvestigation(res.data);
+      }
+    } catch (err) { setInvestigationError(resolveApiError(err, 'Could not load the investigation for this entity.')); }
     finally { setLoading(false); }
   };
 
@@ -225,6 +232,12 @@ export default function Investigation() {
         <h1 className="text-2xl font-bold text-white">Investigation View</h1>
         <p className="text-sm" style={{ color: '#94a3b8' }}>Select an entity to investigate</p>
       </div>
+
+      {investigationError && (
+        <div className="glass-card rounded-xl p-6" style={{ border: '1px solid #ef444440', background: '#ef444415' }}>
+          <p className="text-sm" style={{ color: '#ef4444' }}>{investigationError}</p>
+        </div>
+      )}
 
       <div className="flex flex-col xl:flex-row gap-6">
         {/* Left sidebar - entity list */}

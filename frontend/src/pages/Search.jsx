@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { search, getEntities } from '../api';
+import { resolveApiError } from '../utils/errors';
 
 const ENTITY_COLORS = {
   Person: '#3b82f6', Phone: '#ec4899', Vehicle: '#f59e0b',
@@ -11,6 +12,7 @@ export default function Search() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [popularEntities, setPopularEntities] = useState([]);
   const navigate = useNavigate();
 
@@ -39,10 +41,12 @@ export default function Search() {
     if (!searchQuery.trim()) return;
     setQuery(searchQuery);
     setLoading(true);
+    setError('');
+    setResults(null);
     try {
       const res = await search(searchQuery);
       setResults(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) { setError(resolveApiError(err, 'Search failed. Please try again.')); }
     finally { setLoading(false); }
   };
 
@@ -127,6 +131,12 @@ export default function Search() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="glass-card rounded-xl p-6" style={{ border: '1px solid #ef444440', background: '#ef444415' }}>
+          <p className="text-sm" style={{ color: '#ef4444' }}>{error}</p>
         </div>
       )}
 

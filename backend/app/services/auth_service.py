@@ -161,6 +161,32 @@ def is_refresh_token_revoked(jti: Optional[str]) -> bool:
         return jti in _revoked_refresh
 
 
+# Access-token revocation (in-memory; resets on restart — prototype scope).
+# Access tokens are stateless JWTs, so without a revocation check a logged-out
+# (or stolen) access token would keep working until expiry. Logout therefore
+# records the current access token's jti; authenticated requests reject it.
+_revoked_access: Dict[str, float] = {}
+_revoked_access_lock = threading.Lock()
+
+
+def revoke_access_token(jti: Optional[str]):
+    if not jti:
+        return
+    with _revoked_access_lock:
+        _revoked_access[jti] = time.time() + config.AUTH_ACCESS_TOKEN_EXPIRE_MINUTES * 60
+
+
+def is_access_token_revoked(jti: Optional[str]) -> bool:
+    if not jti:
+        return False
+    with _revoked_access_lock:
+        now = time.time()
+        expired = [k for k, v in _revoked_access.items() if v < now]
+        for k in expired:
+            _revoked_access.pop(k, None)
+        return jti in _revoked_access
+
+
 # ─────────────────────────── AuthUser store (Neo4j) ─────────────────────
 def _auth_user_from_record(record: dict) -> Optional[dict]:
     node = record.get("u")

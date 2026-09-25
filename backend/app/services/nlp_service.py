@@ -44,11 +44,16 @@ class NLPService:
         rule_entities = self._rule_based_extraction(text)
         entities.extend(rule_entities)
 
-        # Deduplicate
+        # Deduplicate and normalize names (cap length — extracted text spans
+        # can be huge for unusual inputs, and entity names are indexed).
         seen = set()
         unique = []
         for e in entities:
-            key = (e["name"].lower(), e["entity_type"])
+            name = (e["name"] or "").strip()[:200]
+            if not name:
+                continue
+            e = {**e, "name": name}
+            key = (name.lower(), e["entity_type"])
             if key not in seen:
                 seen.add(key)
                 unique.append(e)

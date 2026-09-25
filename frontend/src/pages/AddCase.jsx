@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createCrimeRecord } from '../api';
+import { resolveApiError } from '../utils/errors';
 
 export default function AddCase() {
   const navigate = useNavigate();
@@ -29,7 +30,7 @@ export default function AddCase() {
       const res = await createCrimeRecord(form);
       setResult(res.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Error creating case');
+      setError(resolveApiError(err, 'Error creating case. Please try again.'));
     } finally {
       setLoading(false);
     }

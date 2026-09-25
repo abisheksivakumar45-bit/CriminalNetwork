@@ -1,11 +1,21 @@
 from neo4j import GraphDatabase
 from typing import Optional, List, Dict, Any
 import uuid
+import re
 import sys
 import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from config import NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE
+
+# Relationship types are interpolated into Cypher labels (Neo4j cannot
+# parameterize labels/relationship types). Only allow a strict safe pattern;
+# every caller uses validated enums or hardcoded values, so this never matches
+# in normal operation — it is defense-in-depth against future callers.
+_REL_TYPE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+# Path depth bound: protects against deep-traversal resource exhaustion.
+MAX_PATH_DEPTH = 10
 
 
 class Neo4jService:
@@ -61,7 +71,11 @@ class Neo4jService:
                     print(f"Index creation warning: {e}")
 
     def clear_database(self):
-        self._run_write("MATCH (n) DETACH DELETE n")
+        # Wipe only the investigation graph (Entity / CrimeRecord / relationships).
+        # The AuthUser store is an application-account store, NOT investigation
+        # data — deleting it would silently sign out and remove every account
+        # (including admins). It is therefore preserved.
+        self._run_write("MATCH (n) WHERE NOT n:AuthUser DETACH DELETE n")
 
     # ─── Entity CRUD ───
     def create_entity(self, entity_type: str, name: str, properties: dict = None) -> dict:
@@ -97,10 +111,17 @@ class Neo4jService:
         return dict(results[0]["n"]) if results else None
 
     def find_or_create_entity(self, entity_type: str, name: str, properties: dict = None) -> dict:
-        existing = self.get_entity_by_name(name)
+        # Cap entity names (the API already enforces 200 chars via Pydantic,
+        # but NLP-extracted names and seed data bypass validation). Neo4j's
+        # range index rejects indexed string values ~>20 KB, so over-long names
+        # would make every future lookup/write fail.
+        safe_name = (name or "").strip()[:200]
+        if not safe_name:
+            return {}
+        existing = self.get_entity_by_name(safe_name)
         if existing:
             return existing
-        return self.create_entity(entity_type, name, properties)
+        return self.create_entity(entity_type, safe_name, properties)
 
     def get_all_entities(self, entity_type: str = None) -> List[dict]:
         if entity_type:
@@ -124,8 +145,15 @@ class Neo4jService:
     def delete_entity(self, entity_id: str):
         self._run_write("MATCH (n:Entity {id: $id}) DETACH DELETE n", {"id": entity_id})
 
+    def _sanitize_rel_type(self, rel_type: str) -> str:
+        safe = (rel_type or "").strip().upper()
+        if not _REL_TYPE_PATTERN.fullmatch(safe):
+            raise ValueError(f"Invalid relationship type: {rel_type!r}")
+        return safe
+
     # ─── Relationship CRUD ───
     def create_relationship(self, source_id: str, target_id: str, rel_type: str, properties: dict = None) -> dict:
+        rel_label = self._sanitize_rel_type(rel_type)
         props = {}
         if properties:
             for k, v in properties.items():
@@ -134,12 +162,12 @@ class Neo4jService:
                 else:
                     props[k] = str(v) if v else ""
         props["id"] = str(uuid.uuid4())[:8]
-        props["relationship_type"] = rel_type
+        props["relationship_type"] = rel_label
 
         query = f"""
             MATCH (a:Entity {{id: $source_id}})
             MATCH (b:Entity {{id: $target_id}})
-            CREATE (a)-[r:{rel_type}]->(b)
+            CREATE (a)-[r:{rel_label}]->(b)
             SET r = $props
             RETURN r, a.id as source_id, b.id as target_id
         """
@@ -153,20 +181,21 @@ class Neo4jService:
                 "id": props["id"],
                 "source": results[0]["source_id"],
                 "target": results[0]["target_id"],
-                "relationship_type": rel_type,
+                "relationship_type": rel_label,
                 "properties": props,
             }
         return props
 
     def create_crime_relationship(self, entity_id: str, crime_id: str, rel_type: str) -> dict:
+        rel_label = self._sanitize_rel_type(rel_type)
         props = {
             "id": str(uuid.uuid4())[:8],
-            "relationship_type": rel_type,
+            "relationship_type": rel_label,
         }
         query = f"""
             MATCH (a:Entity {{id: $entity_id}})
             MATCH (b:CrimeRecord {{id: $crime_id}})
-            CREATE (a)-[r:{rel_type}]->(b)
+            CREATE (a)-[r:{rel_label}]->(b)
             SET r = $props
             RETURN r, a.id as source_id, b.id as target_id
         """
@@ -175,7 +204,7 @@ class Neo4jService:
             "crime_id": crime_id,
             "props": props,
         })
-        return {"id": props["id"], "source": entity_id, "target": crime_id, "relationship_type": rel_type}
+        return {"id": props["id"], "source": entity_id, "target": crime_id, "relationship_type": rel_label}
 
     def get_relationships(self, entity_id: str = None) -> List[dict]:
         if entity_id:
@@ -348,9 +377,20 @@ class Neo4jService:
 
     # ─── Path Finding ───
     def find_path(self, source_id: str, target_id: str, max_depth: int = 6) -> List[dict]:
+        if not source_id or not target_id:
+            return []
+        if source_id == target_id:
+            # Neo4j's shortestPath raises when start == end; a self-path is
+            # not meaningful, so return "no path".
+            return []
+        try:
+            depth = int(max_depth)
+        except (TypeError, ValueError):
+            depth = 6
+        depth = max(1, min(depth, MAX_PATH_DEPTH))
         results = self._run_query(f"""
             MATCH path = shortestPath(
-                (a:Entity {{id: $source_id}})-[*1..{max_depth}]-(b:Entity {{id: $target_id}})
+                (a:Entity {{id: $source_id}})-[*1..{depth}]-(b:Entity {{id: $target_id}})
             )
             RETURN [n IN nodes(path) | {{id: n.id, name: n.name, entity_type: n.entity_type}}] as nodes,
                    length(path) as path_length

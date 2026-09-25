@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getAuthUsers, createAuthUser, changeUserRole } from '../api';
 import { useAuth } from '../auth/AuthContext';
+import { resolveApiError } from '../utils/errors';
 
 const ROLE_COLORS = { admin: '#8b5cf6', investigator: '#3b82f6', analyst: '#06b6d4' };
 
@@ -30,7 +31,7 @@ export default function Users() {
     setError('');
     getAuthUsers()
       .then((res) => setUsers(res.data))
-      .catch((err) => setError(err.response?.data?.detail || 'Could not load users.'))
+      .catch((err) => setError(resolveApiError(err, 'Could not load users.')))
       .finally(() => setLoading(false));
   };
 
@@ -50,7 +51,7 @@ export default function Users() {
       });
       loadUsers();
     } catch (err) {
-      setRoleError(err.response?.data?.detail || `Could not change role for ${username}.`);
+      setRoleError(resolveApiError(err, `Could not change role for ${username}.`));
     } finally {
       setRoleUpdating(false);
     }
@@ -74,7 +75,7 @@ export default function Users() {
       setFormOpen(false);
       loadUsers();
     } catch (err) {
-      setFormError(err.response?.data?.detail || 'Could not create user.');
+      setFormError(resolveApiError(err, 'Could not create user.'));
     } finally {
       setCreating(false);
     }

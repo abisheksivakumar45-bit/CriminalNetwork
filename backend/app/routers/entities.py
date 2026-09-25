@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from typing import List, Optional
 from datetime import datetime
 import sys
@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.services.database import db_service
-from app.models.schemas import EntityCreate, EntityResponse
+from app.models.schemas import EntityCreate, EntityResponse, EntityType
 from app.dependencies import get_current_user, require_roles, WRITE_ROLES, ADMIN_ONLY
 
 router = APIRouter(
@@ -79,19 +79,26 @@ def entity_to_response(entity: dict) -> EntityResponse:
 
 
 @router.get("/", response_model=List[EntityResponse])
-def get_entities(entity_type: Optional[str] = Query(None, description="Filter by entity type")):
+def get_entities(entity_type: Optional[str] = Query(None, max_length=32, description="Filter by entity type")):
+    if entity_type:
+        allowed = {t.value for t in EntityType}
+        if entity_type not in allowed:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Invalid entity_type. Allowed values: {', '.join(sorted(allowed))}.",
+            )
     entities = db_service.get_all_entities(entity_type)
     return [entity_to_response(e) for e in entities]
 
 
 @router.get("/search/{query}")
-def search_entities(query: str):
+def search_entities(query: str = Path(..., min_length=1, max_length=200)):
     entities = db_service.search_entities(query)
     return [entity_to_response(e).dict() for e in entities]
 
 
 @router.get("/{entity_id}/timeline")
-def get_entity_timeline(entity_id: str):
+def get_entity_timeline(entity_id: str = Path(..., min_length=1, max_length=64)):
     entity = db_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -187,7 +194,7 @@ def get_entity_timeline(entity_id: str):
 
 
 @router.get("/{entity_id}", response_model=EntityResponse)
-def get_entity(entity_id: str):
+def get_entity(entity_id: str = Path(..., min_length=1, max_length=64)):
     entity = db_service.get_entity(entity_id)
     if not entity:
         raise HTTPException(status_code=404, detail="Entity not found")
@@ -201,6 +208,6 @@ def create_entity(data: EntityCreate):
 
 
 @router.delete("/{entity_id}", dependencies=[Depends(require_roles(*ADMIN_ONLY))])
-def delete_entity(entity_id: str):
+def delete_entity(entity_id: str = Path(..., min_length=1, max_length=64)):
     db_service.delete_entity(entity_id)
     return {"message": "Entity deleted"}

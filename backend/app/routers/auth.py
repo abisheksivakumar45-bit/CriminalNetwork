@@ -245,6 +245,12 @@ def refresh(request: Request, response: Response):
 
 @router.post("/logout")
 def logout(request: Request, response: Response):
+    # Revoke the current access token so it cannot be reused after sign-out.
+    access_token = request.cookies.get(ACCESS_COOKIE)
+    if access_token:
+        claims = auth_service.decode_jwt(access_token, config.AUTH_SECRET_KEY)
+        if claims:
+            auth_service.revoke_access_token(claims.get("jti"))
     refresh_token = request.cookies.get(REFRESH_COOKIE)
     if refresh_token:
         claims = auth_service.decode_jwt(refresh_token, config.AUTH_SECRET_KEY)

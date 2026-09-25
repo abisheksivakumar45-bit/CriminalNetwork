@@ -2,6 +2,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { register as apiRegister } from '../api';
+import { resolveApiError } from '../utils/errors';
 
 export default function Register() {
   const { user, loading } = useAuth();
@@ -47,15 +48,10 @@ export default function Register() {
       navigate('/login', { replace: true });
     } catch (err) {
       const status = err.response?.status;
-      const detail = err.response?.data?.detail;
       if (status === 409) {
         setError('Username already exists. Please choose another.');
-      } else if (status === 422) {
-        setError(typeof detail === 'string' ? detail : 'Validation error: password must be at least 8 characters.');
-      } else if (status === 403) {
-        setError(typeof detail === 'string' ? detail : 'This account type is not available for self-registration.');
       } else {
-        setError('Registration failed. Please try again.');
+        setError(resolveApiError(err, 'Registration failed. Please try again.'));
       }
       setPassword('');
       setConfirmPassword('');

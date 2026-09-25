@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { getCrimeRecords } from '../api';
+import { resolveApiError } from '../utils/errors';
 
 const ENTITY_COLORS = {
   Person: '#3b82f6', Phone: '#ec4899', Vehicle: '#f59e0b',
@@ -18,6 +19,7 @@ const STATUS_COLORS = {
 export default function Cases() {
   const [cases, setCases] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selectedCase, setSelectedCase] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,7 +38,7 @@ export default function Cases() {
     try {
       const res = await getCrimeRecords();
       setCases(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) { setLoadError(resolveApiError(err, 'Could not load crime records.')); }
     finally { setLoading(false); }
   };
 
@@ -44,6 +46,17 @@ export default function Cases() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <h1 className="text-2xl font-bold text-white">Crime Records</h1>
+        <div className="glass-card rounded-xl p-6" style={{ border: '1px solid #ef444440', background: '#ef444415' }}>
+          <p className="text-sm" style={{ color: '#ef4444' }}>{loadError}</p>
+        </div>
       </div>
     );
   }
