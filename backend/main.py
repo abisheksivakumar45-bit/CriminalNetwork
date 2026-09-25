@@ -11,7 +11,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config import CORS_ORIGINS
-from app.routers import auth, entities, relationships, crimes, analysis, init_data
+from app.routers import auth, entities, relationships, crimes, analysis, init_data, natural_search
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("crimenet")
@@ -72,6 +72,7 @@ app.include_router(crimes.router)
 app.include_router(analysis.router)
 app.include_router(init_data.router)
 app.include_router(auth.router)
+app.include_router(natural_search.router)
 
 
 @app.exception_handler(Exception)

@@ -23,6 +23,7 @@ A fully functional prototype for criminal network analysis using AI/NLP, graph d
 - **Knowledge Graph** - Interactive D3.js network visualization with entity type filtering
 - **Network Analysis** - Centrality scores, risk assessment, community detection
 - **Entity Search** - Full-text search across all entity types
+- **Natural Language Investigation Search** - Ask investigation questions in plain English
 - **Investigation View** - Detailed entity profile with connections and mini-graph
 - **Add Case** - Add new FIR text and extract entities using NLP
 
@@ -87,10 +88,12 @@ CriminalNetwork/
 │   │   │   ├── relationships.py   # Relationship CRUD
 │   │   │   ├── crimes.py          # Crime records
 │   │   │   ├── analysis.py        # Network analysis & search
+│   │   │   ├── natural_search.py  # Natural language investigation search
 │   │   │   └── init_data.py       # Sample data loader
 │   │   └── services/
 │   │       ├── database.py        # Neo4j service
 │   │       ├── nlp_service.py     # spaCy NLP extraction
+│   │       ├── natural_search.py  # Controlled NL parser + query executors
 │   │       ├── network_analysis.py # NetworkX analysis
 │   │       └── sample_data.py     # Demo data
 │   ├── main.py                    # FastAPI app entry
@@ -105,6 +108,7 @@ CriminalNetwork/
 │   │   │   ├── NetworkGraph.jsx   # D3.js visualization
 │   │   │   ├── Analysis.jsx
 │   │   │   ├── Search.jsx
+│   │   │   ├── NaturalSearch.jsx  # Natural language investigation search
 │   │   │   ├── Investigation.jsx
 │   │   │   └── AddCase.jsx
 │   │   ├── components/Sidebar.jsx
@@ -137,9 +141,47 @@ CriminalNetwork/
 | GET | `/api/network` | Full network data |
 | GET | `/api/search?q=` | Search entities and relationships |
 | GET | `/api/investigation/{id}` | Full investigation view |
+| POST | `/api/investigation/natural-search` | Natural language investigation search |
 | GET | `/api/path?source_id=&target_id=` | Find path between entities |
 | POST | `/api/init/load-sample-data` | Load demo data |
 | POST | `/api/init/clear` | Clear database |
+
+## Natural Language Investigation Search
+
+Investigators can ask controlled investigation questions in plain English and get answers
+drawn **only from the existing case graph** — no synthetic entities or cases are ever fabricated.
+
+### Supported query types
+
+| Intent | Example |
+|--------|---------|
+| Entities connected to an entity | `Show all entities connected to Rajesh Kumar.` |
+| Type-filtered connected entities | `Show organizations connected to Rajesh Kumar.` |
+| Connected through an intermediate type | `Show people connected to Rajesh Kumar through organizations.` |
+| Phone lookups by digits | `Show people connected to phone 9876543210.` |
+| Entities appearing in more than N cases | `Find entities appearing in more than two cases.` (`at least N` also supported) |
+| Cases involving an entity | `Show cases involving Rajesh Kumar.` |
+| Entities in a specific case | `Show entities connected to entities in case FIR-2024-001.` (FIR `FIR 2024 001` / `FIR2024-001` normalize the same) |
+
+### How it works (controlled, explainable, safe)
+- A **deterministic rule-based parser** converts the text into a structured intent
+  (`operation`, `target_entity`, `target_type`, `via_type`, `threshold`, `condition`, `case_ref`)
+  that is shown back to the investigator in an interpretation panel before results.
+- **Entity resolution** priority: explicit `entity_id` (disambiguation) → case-insensitive exact
+  name → normalized phone digits (`9876543210` → `+919876543210`) → case-insensitive substring.
+  Multiple matches return an `ambiguous` response with selectable candidates (≤10).
+- **Security:** the user's free text is never concatenated into Cypher. Only whitelisted,
+  parameterized queries are executed, and every query is capped (50 rows). This is an
+  investigator-assistance tool, so it does **not** claim to understand unrestricted English —
+  anything outside the supported patterns returns `unsupported` with the example list.
+- **Transparency:** every response includes the original query, interpreted summary, structured
+  interpretation, `status` (`ok`/`empty`/`not_found`/`ambiguous`/`unsupported`), results, and a
+  `graph` payload that can be opened on the Knowledge Graph page.
+
+### Endpoint
+`POST /api/investigation/natural-search` — body `{ "query": "...", "entity_id": "optional" }`.
+Read-only and available to `admin`, `investigator`, and `analyst`; unauthenticated requests get
+`401`. Queries are validated (1–500 characters, not blank → else `422`).
 
 ## Authentication & Role-Based Access Control
 

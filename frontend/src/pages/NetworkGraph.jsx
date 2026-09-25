@@ -37,6 +37,8 @@ export default function NetworkGraph() {
   const navigate = useNavigate();
   const location = useLocation();
   const highlightEntityId = location.state?.highlightEntity;
+  const graphDataFromState = location.state?.graphData || null;
+  const graphTitle = location.state?.graphTitle || 'Interactive criminal network visualization';
   const simulationRef = useRef(null);
   const zoomRef = useRef(null);
   const gRef = useRef(null);
@@ -55,7 +57,24 @@ export default function NetworkGraph() {
   }, [data, filter, traceResult]);
 
   const loadData = async () => {
+    if (graphDataFromState) {
+      // Render a scoped subgraph passed from another page (e.g. Natural Language Search).
+      setData(graphDataFromState);
+      setLoading(false);
+      return;
+    }
     try {
+      const res = await getNetwork();
+      setData(res.data);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  };
+
+  const resetToFullGraph = async () => {
+    setTraceResult(null);
+    setSelectedNode(null);
+    try {
+      setLoading(true);
       const res = await getNetwork();
       setData(res.data);
     } catch (err) { console.error(err); }
@@ -365,9 +384,18 @@ export default function NetworkGraph() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-white">Knowledge Graph</h1>
-          <p className="text-sm" style={{ color: '#94a3b8' }}>Interactive criminal network visualization</p>
+          <p className="text-sm" style={{ color: '#94a3b8' }}>{graphTitle}</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          {graphDataFromState && (
+            <button
+              onClick={resetToFullGraph}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+              style={{ background: '#06b6d420', border: '1px solid #06b6d4', color: '#22d3ee' }}
+            >
+              View Full Graph
+            </button>
+          )}
           {['all', 'Person', 'Organization', 'Phone', 'Vehicle', 'Location'].map(type => (
             <button
               key={type}

@@ -196,3 +196,16 @@ class UserResponse(BaseModel):
 
 class AuthSuccessResponse(BaseModel):
     user: UserResponse
+
+
+class NaturalSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500)
+    entity_id: Optional[str] = Field(None, max_length=64, description="Optional entity id to disambiguate when multiple entities match the query.")
+
+    @field_validator("query")
+    @classmethod
+    def _quer_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("query must not be blank")
+        return v

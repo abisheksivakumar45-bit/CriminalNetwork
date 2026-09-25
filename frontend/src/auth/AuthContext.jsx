@@ -4,9 +4,9 @@ import { getCurrentUser, login as apiLogin, logout as apiLogout } from '../api';
 // Role → permitted UI areas. This mirrors backend authorization (which is
 // authoritative); it only controls visibility/navigation for convenience.
 export const ROLE_PERMISSIONS = {
-  admin: ['dashboard', 'cases', 'knowledge_graph', 'network_analysis', 'entity_search', 'investigation', 'add_case', 'users'],
-  investigator: ['dashboard', 'cases', 'knowledge_graph', 'network_analysis', 'entity_search', 'investigation', 'add_case'],
-  analyst: ['dashboard', 'cases', 'knowledge_graph', 'network_analysis', 'entity_search', 'investigation'],
+  admin: ['dashboard', 'cases', 'knowledge_graph', 'network_analysis', 'entity_search', 'natural_search', 'investigation', 'add_case', 'users'],
+  investigator: ['dashboard', 'cases', 'knowledge_graph', 'network_analysis', 'entity_search', 'natural_search', 'investigation', 'add_case'],
+  analyst: ['dashboard', 'cases', 'knowledge_graph', 'network_analysis', 'entity_search', 'natural_search', 'investigation'],
 };
 
 export const ROLE_LABELS = {
