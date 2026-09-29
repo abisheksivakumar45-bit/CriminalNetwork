@@ -30,6 +30,7 @@ export const getNetwork = () => api.get('/network');
 export const search = (q) => api.get('/search', { params: { q } });
 export const getInvestigation = (id) => api.get(`/investigation/${id}`);
 export const naturalSearch = (query, entityId) => api.post('/investigation/natural-search', { query, entity_id: entityId || null });
+export const temporalAnalysis = (params) => api.get('/investigation/temporal-analysis', { params });
 export const getConnectedEntities = (id) => api.get(`/relationships/connected/${id}`);
 export const findPath = (sourceId, targetId) => api.get('/path', { params: { source_id: sourceId, target_id: targetId } });
 export const initSampleData = () => api.post('/init/load-sample-data');

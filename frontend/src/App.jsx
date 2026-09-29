@@ -6,6 +6,7 @@ import NetworkGraph from './pages/NetworkGraph';
 import Analysis from './pages/Analysis';
 import Search from './pages/Search';
 import NaturalSearch from './pages/NaturalSearch';
+import TemporalAnalysis from './pages/TemporalAnalysis';
 import Investigation from './pages/Investigation';
 import AddCase from './pages/AddCase';
 import Login from './pages/Login';
@@ -33,6 +34,7 @@ function AppLayout() {
           <Route path="/analysis" element={<ProtectedRoute permission="network_analysis"><Analysis /></ProtectedRoute>} />
           <Route path="/search" element={<ProtectedRoute permission="entity_search"><Search /></ProtectedRoute>} />
           <Route path="/natural-search" element={<ProtectedRoute permission="natural_search"><NaturalSearch /></ProtectedRoute>} />
+          <Route path="/temporal-analysis" element={<ProtectedRoute permission="temporal_analysis"><TemporalAnalysis /></ProtectedRoute>} />
           <Route path="/investigation" element={<ProtectedRoute permission="investigation"><Investigation /></ProtectedRoute>} />
           <Route path="/investigation/:entityId" element={<ProtectedRoute permission="investigation"><Investigation /></ProtectedRoute>} />
           <Route path="/add-case" element={<ProtectedRoute permission="add_case"><AddCase /></ProtectedRoute>} />

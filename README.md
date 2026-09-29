@@ -24,6 +24,7 @@ A fully functional prototype for criminal network analysis using AI/NLP, graph d
 - **Network Analysis** - Centrality scores, risk assessment, community detection
 - **Entity Search** - Full-text search across all entity types
 - **Natural Language Investigation Search** - Ask investigation questions in plain English
+- **Temporal Network Anomaly Detection** - See how the existing network changes over time (monthly periods, explainable change detections, transparent review indicators)
 - **Investigation View** - Detailed entity profile with connections and mini-graph
 - **Add Case** - Add new FIR text and extract entities using NLP
 
@@ -89,11 +90,13 @@ CriminalNetwork/
 │   │   │   ├── crimes.py          # Crime records
 │   │   │   ├── analysis.py        # Network analysis & search
 │   │   │   ├── natural_search.py  # Natural language investigation search
+│   │   │   ├── temporal.py        # Temporal network anomaly detection
 │   │   │   └── init_data.py       # Sample data loader
 │   │   └── services/
 │   │       ├── database.py        # Neo4j service
 │   │       ├── nlp_service.py     # spaCy NLP extraction
 │   │       ├── natural_search.py  # Controlled NL parser + query executors
+│   │       ├── temporal_service.py # Temporal change detection + review scoring
 │   │       ├── network_analysis.py # NetworkX analysis
 │   │       └── sample_data.py     # Demo data
 │   ├── main.py                    # FastAPI app entry
@@ -109,6 +112,7 @@ CriminalNetwork/
 │   │   │   ├── Analysis.jsx
 │   │   │   ├── Search.jsx
 │   │   │   ├── NaturalSearch.jsx  # Natural language investigation search
+│   │   │   ├── TemporalAnalysis.jsx # Temporal network anomaly detection
 │   │   │   ├── Investigation.jsx
 │   │   │   └── AddCase.jsx
 │   │   ├── components/Sidebar.jsx
@@ -142,6 +146,7 @@ CriminalNetwork/
 | GET | `/api/search?q=` | Search entities and relationships |
 | GET | `/api/investigation/{id}` | Full investigation view |
 | POST | `/api/investigation/natural-search` | Natural language investigation search |
+| GET | `/api/investigation/temporal-analysis` | Temporal network anomaly detection (change over time) |
 | GET | `/api/path?source_id=&target_id=` | Find path between entities |
 | POST | `/api/init/load-sample-data` | Load demo data |
 | POST | `/api/init/clear` | Clear database |
@@ -182,6 +187,74 @@ drawn **only from the existing case graph** — no synthetic entities or cases a
 `POST /api/investigation/natural-search` — body `{ "query": "...", "entity_id": "optional" }`.
 Read-only and available to `admin`, `investigator`, and `analyst`; unauthenticated requests get
 `401`. Queries are validated (1–500 characters, not blank → else `422`).
+
+## Temporal Network Anomaly Detection
+
+The **Temporal Network Analysis** page (`/temporal-analysis`) answers one question: *how does the
+existing case network change over time?* It compares calendar-month periods derived from the
+case dates already stored in Neo4j and reports **measurable changes only** — the same graph, the
+same dates, nothing invented.
+
+> This is an investigative analysis aid. It identifies unusual changes in existing network data.
+> It does **not** predict criminal activity, does not infer guilt, and never creates or modifies a
+> case, entity or relationship.
+
+### Detections
+
+| # | Detection | Rule (all deterministic) |
+|---|-----------|--------------------------|
+| A | Sudden connection increase | An entity gains ≥3 new case-linked connections in one period *after* having gained ≥1 in an earlier period, and the gain is ≥3 more than (and >2×) its prior gains |
+| B | New relationships | A stored relationship whose **first recorded date** (earliest dated case in which both endpoints appear) falls in a period later than the network's first observed period |
+| C | New entities entering the network | An entity whose **first recorded activity** (earliest dated case it is linked to) falls in a period later than the first observed period |
+| D | Bridge formation | A stored relationship connecting two different **co-involvement groups** (connected components of entities sharing a dated case), dated at the later of the two first-activity dates |
+| E | Activity burst | Period events ≥ max(4, 2 × baseline) **and** ≥ baseline + 3, where the baseline is the average event count of the *other* observed periods |
+| F | Disappeared relationships | Always reports *insufficient data* — the schema stores no relationship end dates or deletion history |
+
+Each finding carries the exact counts, dates and rule that produced it in a `why` block, and each
+list reports its full `total` alongside the capped `shown` count so nothing is silently hidden.
+
+### Honest about missing history
+
+- Periods are **observed** periods only — a range with fewer than two observed periods returns
+  `"Insufficient historical data for this analysis."` for every detection instead of guessing.
+- Relationships whose endpoints never co-appear in a dated case have **no temporal anchor** and
+  are excluded from B (their count is reported in the response as a note).
+- F is permanently unavailable for the reason above. The UI shows the message rather than an
+  empty section.
+- Detection A legitimately returns nothing on data where no entity gains connections in
+  separate periods — an empty result is a real result, not a failure.
+
+### Review indicators (transparent scoring)
+
+Findings are aggregated per entity into a **review indicator score** made only of the measured
+factors, with no hidden model:
+
+```
+score = min(connection_increase, 10) x 2
+      + min(new_relationships, 5)  x 3
+      + min(related_cases, 5)      x 2
+      + 10  if bridge formation
+      + 10  if activity burst
+```
+
+Severity: `High` ≥ 25, `Medium` ≥ 12, otherwise `Low`. Every item lists the factors as plain
+lines (`Connection increase: +n`, `New relationships: n`, `Related cases: n`, `Bridge formation:
+Yes/No`, `Activity burst: Yes/No`), and the response publishes the full `rules` and `caps` so the
+arithmetic can be re-checked by hand.
+
+### Endpoint
+
+`GET /api/investigation/temporal-analysis?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD&period=month`
+
+- All three query parameters are optional; omitting the dates analyses every dated case, and the
+  window is clamped to the dates that actually exist in the database.
+- `period` supports only `month` (case records carry a single date). Any other value → `422`.
+- Malformed, impossible, or inverted dates → `422`.
+- Read-only (`GET` only), available to `admin`, `investigator`, and `analyst`; unauthenticated
+  requests get `401`. Identical requests return byte-identical responses.
+- Response: `time_range`, `summary` (per-period case/entity/relationship/event counts and the
+  cases in each period), `detections` (A–F with `message`, `total`, `shown`, `items`),
+  `review_items` + `review_summary`, `rules`, `caps`.
 
 ## Authentication & Role-Based Access Control
 
